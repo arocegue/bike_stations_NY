@@ -16,18 +16,32 @@ let streetmap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 });
 
 // Initialize all the LayerGroups that we'll use.
+// let layers = {
+//   COMING_SOON: new L.LayerGroup(),
+//   EMPTY: new L.LayerGroup(),
+//   LOW: new L.LayerGroup(),
+//   NORMAL: new L.LayerGroup(),
+//   OUT_OF_ORDER: new L.LayerGroup()
+// };
+const markerClusterOptions = {
+    maxClusterRadius: 45,   
+    disableClusteringAtZoom: 15,
+  }
+
+
 let layers = {
-  COMING_SOON: new L.LayerGroup(),
-  EMPTY: new L.LayerGroup(),
-  LOW: new L.LayerGroup(),
-  NORMAL: new L.LayerGroup(),
-  OUT_OF_ORDER: new L.LayerGroup()
+  COMING_SOON: new L.MarkerClusterGroup(markerClusterOptions),
+  EMPTY: new L.MarkerClusterGroup(markerClusterOptions),
+  LOW: new L.MarkerClusterGroup(markerClusterOptions),
+  NORMAL: new L.MarkerClusterGroup(markerClusterOptions),
+  OUT_OF_ORDER: new L.MarkerClusterGroup(markerClusterOptions)
 };
 
 // Create the map with our layers.
 let map = L.map("map-id", {
   center: [40.75, -73.97],
   zoom: 12,
+  maxZoom: 16,
   layers: [
     layers.NORMAL,
     layers.LOW,
@@ -35,7 +49,8 @@ let map = L.map("map-id", {
     layers.COMING_SOON,
     layers.OUT_OF_ORDER
   ],
-  maxBounds: L.latLngBounds(L.latLng(40.477, -74.259), L.latLng(40.93, -73.700))
+  maxBounds: L.latLngBounds(L.latLng(40.477, -74.259), L.latLng(40.93, -73.700)),
+  preferCanvas: true
 });
 
 // Add our "streetmap" tile layer to the map.
@@ -100,6 +115,13 @@ let icons = {
   })
 };
 
+let colorMap = {
+  NORMAL: "green",
+  LOW: "orange",
+  EMPTY: "red",
+  COMING_SOON: "yellow",
+  OUT_OF_ORDER: "darkblue"
+};
 // Perform an API call to the Citi Bike station information endpoint.
 d3.json("https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_information.json").then(function(infoRes) {
 
@@ -182,10 +204,7 @@ d3.json("https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_information.json").then(f
         </div>
       </div>
       
-      
-      
       `
-      // newMarker.bindPopup(station.name + "<br> Capacity: " + station.capacity + "<br>" + station.num_bikes_available + " Bikes Available" );
       newMarker.bindPopup(htmlString);
 
     }
