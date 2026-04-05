@@ -1,3 +1,15 @@
+// Update the legend's innerHTML with the last updated time and station count.
+function updateLegend(time, stationCount) {
+  document.querySelector(".legend").innerHTML = [
+    "<p class='healthy'>Healthy Stations: " + stationCount.NORMAL + "</p>",
+    "<p class='low'>Low Stations: " + stationCount.LOW + "</p>",
+    "<p class='empty'>Empty Stations: " + stationCount.EMPTY + "</p>",
+    "<p class='coming-soon'>Stations Coming Soon: " + stationCount.COMING_SOON + "</p>",
+    "<p class='out-of-order'>Out of Order Stations: " + stationCount.OUT_OF_ORDER + "</p>",
+    "<p>Updated: " + moment.unix(time).format("h:mm:ss A") + "</p>",
+  ].join("");
+}
+
 // Create the tile layer that will be the background of our map.
 let streetmap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -14,15 +26,16 @@ let layers = {
 
 // Create the map with our layers.
 let map = L.map("map-id", {
-  center: [40.73, -74.0059],
+  center: [40.75, -73.97],
   zoom: 12,
   layers: [
-    layers.COMING_SOON,
-    layers.EMPTY,
-    layers.LOW,
     layers.NORMAL,
+    layers.LOW,
+    layers.EMPTY,
+    layers.COMING_SOON,
     layers.OUT_OF_ORDER
-  ]
+  ],
+  maxBounds: L.latLngBounds(L.latLng(40.477, -74.259), L.latLng(40.93, -73.700))
 });
 
 // Add our "streetmap" tile layer to the map.
@@ -30,10 +43,10 @@ streetmap.addTo(map);
 
 // Create an overlays object to add to the layer control.
 let overlays = {
-  "Coming Soon": layers.COMING_SOON,
-  "Empty Stations": layers.EMPTY,
-  "Low Stations": layers.LOW,
   "Healthy Stations": layers.NORMAL,
+  "Low Stations": layers.LOW,
+  "Empty Stations": layers.EMPTY,
+  "Coming Soon": layers.COMING_SOON,
   "Out of Order": layers.OUT_OF_ORDER
 };
 
@@ -88,13 +101,19 @@ let icons = {
 };
 
 // Perform an API call to the Citi Bike station information endpoint.
-d3.json("https://gbfs.citibikenyc.com/gbfs/en/station_information.json").then(function(infoRes) {
+d3.json("https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_information.json").then(function(infoRes) {
 
   // When the first API call completes, perform another call to the Citi Bike station status endpoint.
-  d3.json("https://gbfs.citibikenyc.com/gbfs/en/station_status.json").then(function(statusRes) {
+  d3.json("https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json").then(function(statusRes) {
     let updatedAt = infoRes.last_updated;
     let stationStatus = statusRes.data.stations;
     let stationInfo = infoRes.data.stations;
+
+    // Build a lookup map from status array keyed by station_id
+    let statusMap = {};
+    for (const s of stationStatus) {
+      statusMap[s.station_id] = s;
+    }
 
     // Create an object to keep the number of markers in each layer.
     let stationCount = {
@@ -110,9 +129,15 @@ d3.json("https://gbfs.citibikenyc.com/gbfs/en/station_information.json").then(fu
 
     // Loop through the stations (they're the same size and have partially matching data).
     for (let i = 0; i < stationInfo.length; i++) {
+      let info = stationInfo[i];
 
+      // Look up the matching status by station_id instead of by index
+      let status = statusMap[info.station_id];
+
+      // Skip if no matching status found
+      if (!status) continue;
       // Create a new station object with properties of both station objects.
-      let station = Object.assign({}, stationInfo[i], stationStatus[i]);
+      let station = Object.assign({}, info, status);
       // If a station is listed but not installed, it's coming soon.
       if (!station.is_installed) {
         stationStatusCode = "COMING_SOON";
@@ -145,22 +170,27 @@ d3.json("https://gbfs.citibikenyc.com/gbfs/en/station_information.json").then(fu
       newMarker.addTo(layers[stationStatusCode]);
 
       // Bind a popup to the marker that will  display on being clicked. This will be rendered as HTML.
-      newMarker.bindPopup(station.name + "<br> Capacity: " + station.capacity + "<br>" + station.num_bikes_available + " Bikes Available");
+      let htmlString = `
+      <div class="marker-content">
+        <h3>${station.name}</h3>
+        <div class="available-content">
+          ${stationStatusCode !== "COMING_SOON" && stationStatusCode !== "OUT_OF_ORDER" ? `
+          <div><span class="label">E-Bikes Available:</span> ${station.num_ebikes_available}</div>
+          <div><span class="label">Classic Bikes Available:</span> ${station.num_bikes_available - station.num_ebikes_available}</div>
+          <div><span class="label">Docks Available:</span> ${station.num_docks_available}</div>
+           ` : `<div style="text-align: center;"><span class="label">${stationStatusCode.split("_").join(" ")}</span></div>`}
+        </div>
+      </div>
+      
+      
+      
+      `
+      // newMarker.bindPopup(station.name + "<br> Capacity: " + station.capacity + "<br>" + station.num_bikes_available + " Bikes Available" );
+      newMarker.bindPopup(htmlString);
+
     }
 
     // Call the updateLegend function, which will update the legend!
     updateLegend(updatedAt, stationCount);
   });
 });
-
-// Update the legend's innerHTML with the last updated time and station count.
-function updateLegend(time, stationCount) {
-  document.querySelector(".legend").innerHTML = [
-    "<p>Updated: " + moment.unix(time).format("h:mm:ss A") + "</p>",
-    "<p class='out-of-order'>Out of Order Stations: " + stationCount.OUT_OF_ORDER + "</p>",
-    "<p class='coming-soon'>Stations Coming Soon: " + stationCount.COMING_SOON + "</p>",
-    "<p class='empty'>Empty Stations: " + stationCount.EMPTY + "</p>",
-    "<p class='low'>Low Stations: " + stationCount.LOW + "</p>",
-    "<p class='healthy'>Healthy Stations: " + stationCount.NORMAL + "</p>"
-  ].join("");
-}

@@ -37,3 +37,20 @@ body,
 .legend .out-of-order {
   color: #007dff;
 }
+
+.marker-content h3 {
+  border-bottom: 1px solid black;
+  margin: 0.5rem 0 0 0;
+}
+
+.marker-content p {
+  margin: 4px 0px;
+}
+
+.available-content {
+  margin-top: 0.5rem;
+}
+
+.label {
+  font-weight: bold;
+}
