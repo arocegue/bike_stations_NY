@@ -1,3 +1,17 @@
+// Store station data after the API call so we can redraw
+let stationData = [];
+
+// Define your zoom threshold
+const ZOOM_THRESHOLD = 15;
+
+let colorMap = {
+  NORMAL: "green",
+  LOW: "orange",
+  EMPTY: "red",
+  COMING_SOON: "yellow",
+  OUT_OF_ORDER: "darkblue"
+};
+
 // Update the legend's innerHTML with the last updated time and station count.
 function updateLegend(time, stationCount) {
   document.querySelector(".legend").innerHTML = [
@@ -15,26 +29,13 @@ let streetmap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 });
 
-// Initialize all the LayerGroups that we'll use.
-// let layers = {
-//   COMING_SOON: new L.LayerGroup(),
-//   EMPTY: new L.LayerGroup(),
-//   LOW: new L.LayerGroup(),
-//   NORMAL: new L.LayerGroup(),
-//   OUT_OF_ORDER: new L.LayerGroup()
-// };
-const markerClusterOptions = {
-    maxClusterRadius: 45,   
-    disableClusteringAtZoom: 15,
-  }
-
-
+//Initialize all the LayerGroups that we'll use.
 let layers = {
-  COMING_SOON: new L.MarkerClusterGroup(markerClusterOptions),
-  EMPTY: new L.MarkerClusterGroup(markerClusterOptions),
-  LOW: new L.MarkerClusterGroup(markerClusterOptions),
-  NORMAL: new L.MarkerClusterGroup(markerClusterOptions),
-  OUT_OF_ORDER: new L.MarkerClusterGroup(markerClusterOptions)
+  COMING_SOON: new L.LayerGroup(),
+  EMPTY: new L.LayerGroup(),
+  LOW: new L.LayerGroup(),
+  NORMAL: new L.LayerGroup(),
+  OUT_OF_ORDER: new L.LayerGroup()
 };
 
 // Create the map with our layers.
@@ -115,13 +116,55 @@ let icons = {
   })
 };
 
-let colorMap = {
-  NORMAL: "green",
-  LOW: "orange",
-  EMPTY: "red",
-  COMING_SOON: "yellow",
-  OUT_OF_ORDER: "darkblue"
-};
+
+function renderMarkers() {
+  let currentZoom = map.getZoom();
+
+  // Clear all layers
+  Object.values(layers).forEach(layer => layer.clearLayers());
+
+  stationData.forEach(({ station, stationStatusCode }) => {
+    let newMarker;
+
+    if (currentZoom >= ZOOM_THRESHOLD) {
+      // Use ExtraMarkers icons when zoomed in
+      newMarker = L.marker([station.lat, station.lon], {
+        icon: icons[stationStatusCode]
+      });
+    } else {
+      // Use circleMarkers when zoomed out
+      newMarker = L.circleMarker([station.lat, station.lon], {
+        radius: 6,
+        fillColor: colorMap[stationStatusCode],
+        color: "#fff",
+        weight: 1,
+        fillOpacity: 0.8
+      });
+    }
+
+    // Build popup HTML
+    let htmlString = `
+      <div class="marker-content">
+        <h3>${station.name}</h3>
+        <div class="available-content">
+          ${stationStatusCode !== "COMING_SOON" && stationStatusCode !== "OUT_OF_ORDER" ? `
+          <div><span class="label">E-Bikes Available:</span> ${station.num_ebikes_available}</div>
+          <div><span class="label">Classic Bikes Available:</span> ${station.num_bikes_available - station.num_ebikes_available}</div>
+          <div><span class="label">Docks Available:</span> ${station.num_docks_available}</div>
+          ` : `<div style="text-align: center;"><span class="label">${stationStatusCode.split("_").join(" ")}</span></div>`}
+        </div>
+      </div>
+    `;
+
+    newMarker.bindPopup(htmlString);
+    newMarker.addTo(layers[stationStatusCode]);
+  });
+}
+
+// Listen for zoom changes
+map.on("zoomend", renderMarkers);
+
+
 // Perform an API call to the Citi Bike station information endpoint.
 d3.json("https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_information.json").then(function(infoRes) {
 
@@ -183,33 +226,13 @@ d3.json("https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_information.json").then(f
 
       // Update the station count.
       stationCount[stationStatusCode]++;
-      // Create a new marker with the appropriate icon and coordinates.
-      let newMarker = L.marker([station.lat, station.lon], {
-        icon: icons[stationStatusCode]
-      });
-
-      // Add the new marker to the appropriate layer.
-      newMarker.addTo(layers[stationStatusCode]);
-
-      // Bind a popup to the marker that will  display on being clicked. This will be rendered as HTML.
-      let htmlString = `
-      <div class="marker-content">
-        <h3>${station.name}</h3>
-        <div class="available-content">
-          ${stationStatusCode !== "COMING_SOON" && stationStatusCode !== "OUT_OF_ORDER" ? `
-          <div><span class="label">E-Bikes Available:</span> ${station.num_ebikes_available}</div>
-          <div><span class="label">Classic Bikes Available:</span> ${station.num_bikes_available - station.num_ebikes_available}</div>
-          <div><span class="label">Docks Available:</span> ${station.num_docks_available}</div>
-           ` : `<div style="text-align: center;"><span class="label">${stationStatusCode.split("_").join(" ")}</span></div>`}
-        </div>
-      </div>
-      
-      `
-      newMarker.bindPopup(htmlString);
+      // Push to stationData instead of directly creating markers
+      stationData.push({ station, stationStatusCode });
 
     }
 
     // Call the updateLegend function, which will update the legend!
+    renderMarkers();
     updateLegend(updatedAt, stationCount);
   });
 });
